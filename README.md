@@ -1,12 +1,21 @@
 curvetls: a simple, robust transport encryption package
 =======================================================
 
-Welcome to curvetls.  This package is a Go library that provides a
-pluggable wrapper (client / server) for network I/O, which allows
-you to upgrade your regular network sockets to a protocol that
-supports robust framing and transport security, so long as the
-underlying transport is of any reliable kind (e.g. a TCP- or
-file-backed `net.Conn`).
+curvetls is a Go library that gives you a robust framing and encryption
+layer for your Go programs, striving to be secure, strict, and simple.
+
+With curvetls, it's dead easy to go from raw sockets to secure channels,
+based on CurveCP (NaCL) encryption primitives, and you get framing for free.
+This makes it dead easy for you to write secure, robust clients and servers
+that do not need to implement low-level control flow at all.  While curvetls
+is based on the CurveZMQ specification, it does not depend on any ZeroMQ
+or CurveZMQ libraries itself.
+
+This library gives you a layered, stackable wrapper (client / server) for
+network I/O, which allows you to upgrade regular network sockets to the
+curvetls protocol.  All the wrapper needs is a key pair, a random nonce,
+and a socket whose underlying transport is of any reliable kind (e.g.
+a TCP- or file-backed `net.Conn`).
 
 The library is documented.  The easiest way to look at the documentation
 is by cloning this repository, then running `godoc` against it.
