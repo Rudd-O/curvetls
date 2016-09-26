@@ -1,5 +1,5 @@
-curvetls: a simple and robust transport encryption package
-==========================================================
+curvetls: a simple, robust transport encryption package
+=======================================================
 
 Welcome to curvetls.  This package is a Go library that provides a
 pluggable wrapper (client / server) for network I/O, which allows
