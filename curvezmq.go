@@ -1,8 +1,5 @@
 package curvetls
 
-// TODO: optimize memory for the handshake because right now it takes
-// a lot of memory because we are not reusing the buffers, and we could be.
-
 import (
 	"bytes"
 	"crypto/rand"
@@ -322,7 +319,7 @@ func readFrame(conn net.Conn, dest frame) error {
 	buf := dest.getBuffer()
 	if uint64(len(buf)) != uint64len {
 		canRealloc, err := dest.realloc(uint64len)
-		// Replicated in genericFrame.convert().
+		// Replicated in genericFrame.convert().  FIXME dedup.
 		if !canRealloc {
 			return newProtocolError("sender says frame is %d bytes, buffer is %d bytes", uint64len, len(buf))
 		}
@@ -1019,7 +1016,7 @@ func (c *genericCommand) convert() (frame, error) {
 
 	buf := realCmd.getBuffer()
 	if uint64(len(buf)) != c.curlen {
-		// Replicated in readFrame().
+		// Replicated in readFrame().  FIXME dedup.
 		canRealloc, err := realCmd.realloc(c.curlen)
 		if !canRealloc {
 			return nil, fmt.Errorf("sender says frame is %d bytes, buffer is %d bytes", c.curlen, len(buf))
