@@ -1,3 +1,5 @@
+// Package curvetls is a robust and simple transport encryption library.
+//
 // Package curvetls provides a pluggable wrapper (client / server)
 // for network I/O, which allows you to upgrade your regular network sockets
 // to a protocol that supports robust framing and transport security,
