@@ -28,6 +28,22 @@ func NewLongNonce() (*longNonce, error) {
 ///
 // Use WrapClient() or WrapServer() to obtain one, and use its methods to
 // engage in secure communication.
+//
+// Lifecycle Information
+//
+// In general, it is not thread safe to perform reads or writes on an
+// EncryptedConn while any part of a handshake (WrapClient(), WrapServer(),
+// Allow() or Deny()) is going on in a different goroutine.  You should
+// complete the handshakes on a single goroutine.  It is also not safe to
+// perform reads simultaneously on two or more goroutines.  It is also not
+// safe to perform writes simultaneously on two or more goroutines.  It is
+// also not safe to intersperse calls to Read() and ReadFrame(), even from
+// the same goroutine.
+//
+// Concurrent things that are safe: (1) one read and one write each on a
+// distinct goroutine (2) same as (1) while Close() is invoked on another
+// goroutine (the ongoing read and write should return normally with an EOF
+// or UnexpectedEOF in that case).
 type EncryptedConn struct {
 	conn           net.Conn
 	myNonce        *shortNonce

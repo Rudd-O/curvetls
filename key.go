@@ -48,30 +48,51 @@ func keyFromSlice(s []byte, t string) (p [32]byte, err error) {
 	return p, nil
 }
 
+// Privkey is an opaque type representing a private key as used in curvetls.
 type Privkey key
-
-func pubkeyFromSlice(s []byte) (p Pubkey, err error) {
-	return keyFromSlice(s, "public")
-}
-func PubkeyFromString(s string) (p Pubkey, err error) {
-	return keyFromString(s, "public")
-}
-func (k Privkey) String() string {
-	return "p" + base64.StdEncoding.EncodeToString(k[:])
-}
-
-type Pubkey key
 
 func privkeyFromSlice(s []byte) (p Privkey, err error) {
 	return keyFromSlice(s, "private")
 }
+
+// PubkeyFromString deserializes a Pubkey as supplied in the string.
+// See Pubkey.String() for information on the string format of Pubkeys.
+//
+// String format of Privkey is the letter p plus a base64 rendering
+// of 32 bytes.
+func PubkeyFromString(s string) (p Pubkey, err error) {
+	return keyFromString(s, "public")
+}
+
+// String format of Privkey is the letter "p" plus a base64 rendering
+// of 32 bytes.
+func (k Privkey) String() string {
+	return "p" + base64.StdEncoding.EncodeToString(k[:])
+}
+
+// Pubkey is an opaque type representing a public key as used in curvetls.
+type Pubkey key
+
+func pubkeyFromSlice(s []byte) (p Pubkey, err error) {
+	return keyFromSlice(s, "public")
+}
+
+// PrivkeyFromString deserializes a Privkey as supplied in the string.
+// See Privkey.String() for information on the string format of Privkeys.
 func PrivkeyFromString(s string) (p Privkey, err error) {
 	return keyFromString(s, "private")
 }
+
+// String format of Privkey is the letter "P" plus a base64 rendering
+// of 32 bytes.
 func (k Pubkey) String() string {
 	return "P" + base64.StdEncoding.EncodeToString(k[:])
 }
 
+// GenKeyPair generates a pair of private and public keys as
+// Privkey and Pubkey structs.
+//
+// It is safe to invoke this function concurrently.
 func GenKeyPair() (Privkey, Pubkey, error) {
 	public, private, err := box.GenerateKey(rand.Reader)
 	if err != nil {
