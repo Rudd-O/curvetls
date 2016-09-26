@@ -95,7 +95,7 @@ Technical and compatibility information
 Compatibility:
 
 * The robust framing is compliant with the ZeroMQ framing scheme as documented
-  in https:rfc.zeromq.org/spec:37/ZMTP/
+  in https://rfc.zeromq.org/spec:37/ZMTP/
 * The transport security handshake is compliant with the CurveZMQ specification
   as documented in available at http://curvezmq.org/
 
