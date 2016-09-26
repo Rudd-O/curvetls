@@ -76,5 +76,4 @@
 // wrapping library which will wrap (let's say, UDP) network I/O sockets using
 // the CurveCP congestion algorithm as specified in its documentation.  Such a
 // wrapper, if it returns net.Conn instances, will be compatible with this work.
-
 package curvetls
