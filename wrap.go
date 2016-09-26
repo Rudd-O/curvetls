@@ -43,7 +43,10 @@ func NewLongNonce() (*longNonce, error) {
 // Concurrent things that are safe: (1) one read and one write each on a
 // distinct goroutine (2) same as (1) while Close() is invoked on another
 // goroutine (the ongoing read and write should return normally with an EOF
-// or UnexpectedEOF in that case).
+// or UnexpectedEOF in that case). (3) performing any operation on one
+// EncryptedConn in a single goroutine, while any other operation on
+// another EncryptedConn is ongoing in another goroutine.  There is no
+// global mutable state shared among EncryptedConn instances.
 type EncryptedConn struct {
 	conn           net.Conn
 	myNonce        *shortNonce
