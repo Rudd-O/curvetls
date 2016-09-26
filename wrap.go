@@ -68,6 +68,13 @@ func (w *EncryptedConn) RemoteAddr() net.Addr {
 // If this function returns an error, the socket remains open, but
 // (much like TLS) it is highly unlikely that, after returning an error,
 // the connection will continue working.
+//
+// It is an error to invoke an EncryptedConn's Read() from a goroutine
+// while another goroutine is invoking Read() or ReadFrame() on the same
+// EncryptedConn.  Even with plain old sockets, you'd get nothing but
+// corrupted reads that way.  It should, however, be safe to invoke Read()
+// on an EncryptedConn within one goroutine while another goroutine invokes
+// Write() on the same EncryptedConn.
 func (w *EncryptedConn) Read(b []byte) (int, error) {
 	if w.recvFrame == nil {
 		frame, err := w.ReadFrame()
@@ -93,12 +100,32 @@ func (w *EncryptedConn) Read(b []byte) (int, error) {
 //
 // It is an error to call ReadFrame when a previous Read was only partially
 // written to its output buffer.
+//
+// It is an error to invoke an EncryptedConn's ReadFrame() from a goroutine
+// while another goroutine is invoking ReadFrame() or Read() on the same
+// EncryptedConn.  Even with plain old sockets, you'd get nothing but
+// corruption that way.  It should, however, be safe to invoke ReadFrame()
+// on an EncryptedConn within one goroutine while another goroutine invokes
+// Write() on the same EncryptedConn.
 func (w *EncryptedConn) ReadFrame() ([]byte, error) {
 	if w.recvFrame != nil {
 		return nil, newInternalError("cannot read a frame while there is a prior partial frame buffered")
 	}
-
 	/* Read and validate message. */
+
+	// The following chunk altering w is safe so long as it is never
+	// invoked simultaneously from two goroutines.
+	//
+	// Two things change within w (and linked members) when this code runs:
+	//
+	// 1. 8 bytes in w itself, when w gets written to, in order to
+	//    store the buffer.  Changes to this part of w do not need
+	//    to be visible in causal order to goroutines running
+	//    Write()s in order for those Write()s to execute successfully.
+	// 2. 0 bytes in w proper, but an uint64 value pointed to by
+	//    the theirNonce member does get incremented.  Again, this does
+	//    not affect w, or concurrent Write()s.
+
 	if w.recvMessageCmd == nil {
 		w.recvMessageCmd = &messageCommand{}
 	}
@@ -121,8 +148,27 @@ func (w *EncryptedConn) ReadFrame() ([]byte, error) {
 // If this function returns an error, the socket remains open, but
 // (much like TLS) it is highly unlikely that, after returning an error,
 // the connection will continue working.
+//
+// It is an error to invoke Write() on the same EncryptedConn simultaneously
+// from two goroutines.  Even with plain old sockets, you'd get nothing but
+// corruption that way.  It should, however, be safe to invoke Write()
+// on an EncryptedConn within one goroutine while another goroutine invokes
+// Read() or ReadFrame() on the same EncryptedConn.
 func (w *EncryptedConn) Write(b []byte) (int, error) {
 	/* Build and send message. */
+
+	// The following chunk altering w is safe so long as it is never
+	// invoked simultaneously from two goroutines.
+	//
+	// Two things change within w (and linked members) when this code runs:
+	//
+	// 1. 8 bytes in w itself, when w gets written to, in order to
+	//    store the buffer.  Changes to this part of w do not need
+	//    to be visible in causal order to goroutines running
+	//    ReadFrame()s in order for those ReadFrame()s to run correctly.
+	// 2. 0 bytes in w proper, but an uint64 value pointed to by
+	//    the myNonce member does get incremented.  Again, this does
+	//    not affect w, or concurrent ReadFrame()s.
 	if w.sendMessageCmd == nil {
 		w.sendMessageCmd = &messageCommand{}
 	}
@@ -494,4 +540,3 @@ func IsAuthenticationError(e error) bool {
 	_, ok := e.(*authenticationError)
 	return ok
 }
-
