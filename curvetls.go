@@ -40,6 +40,6 @@
 // is encrypted with (a limited version of) the CurveZMQ protocol.
 //
 // Sending and receiving traffic is covered by the documentation of the
-// Read(), ReadFrame() and WriteFrame() methods of EncryptedConn.  Two
+// Read(), ReadFrame() and Write() methods of EncryptedConn.  Two
 // example programs are included in the cmd/ directory of this package.
 package curvetls
