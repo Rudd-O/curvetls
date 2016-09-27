@@ -46,26 +46,33 @@ var clientMessageNoncePrefix = [16]byte{'C', 'u', 'r', 'v', 'e', 'Z', 'M', 'Q', 
 const maxUint = ^uint(0)
 const maxFrameSize = int(maxUint >> 1)
 
+// The following function reads from the read buffer until
+// either it exhausts or the conn returns an error such as EOF.
+// Callers assume that an error means it's game over, and have
+// no need to process the length of the read data.
 func rc(conn net.Conn, buf []byte) error {
-	n, err := conn.Read(buf)
-	if err != nil {
-		return err
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			return err
+		}
+		if n < len(buf) {
+			buf = buf[n:]
+			continue
+		}
+		return nil
 	}
-	if n != len(buf) {
-		return fmt.Errorf("short read")
-	}
-	return nil
 }
 
 func wc(conn net.Conn, data []byte) error {
-	n, err := conn.Write(data)
-	if err != nil {
-		return err
-	}
-	if n != len(data) {
-		return fmt.Errorf("short write")
-	}
-	return nil
+	// Note for myself about the net.Conn Write() protocol.
+	// I read online somewhere that, if Write(buf) is called, and the returned n
+	// is smaller than len(buf), the implementation of Write() must guarantee
+	// that err is non-nil.
+	// The message was titled "Re: io.MultiWriter has an extra check to bytes written",
+	// available at https://groups.google.com/d/msg/golang-nuts/WoEP93-Bzn8/5Ij2VTraAgAJ
+	_, err := conn.Write(data)
+	return err
 }
 
 func wrc(conn net.Conn, dataToWrite []byte, bufToReadInto []byte) error {
