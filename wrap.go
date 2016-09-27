@@ -6,6 +6,11 @@ import (
 	"net"
 )
 
+// Note for myself about the net.Conn Read() protocol.
+// I read online somewhere that, if Read(buf) is called, and the returned n
+// is smaller than len(buf), the implementation of Read() must guarantee
+// that err is non-nil.
+
 // NewLongNonce generates a long nonce for use with curvetls.WrapServer
 // and curvetls.WrapClient.
 // A long nonce is needed and must be unique per long-term private key,
