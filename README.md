@@ -3,12 +3,13 @@
 curvetls is a Go library that gives you a robust framing and encryption
 layer for your Go programs, striving to be secure, strict, and simple.
 
-With curvetls, it's dead easy to go from raw sockets to secure channels,
-based on CurveCP (NaCL) encryption primitives, and you get framing for free.
-This makes it dead easy for you to write secure, robust clients and servers
-that do not need to implement low-level control flow at all.  While curvetls
-is based on the CurveZMQ specification, it does not depend on any ZeroMQ
-or CurveZMQ libraries itself.
+With curvetls, it's dead easy to go from ordinary sockets to secure
+encrypted channels that support framing.  This makes it trivial for you
+to write secure, robust clients and servers that do not need to implement
+low-level control flow.  curvetls does not use large or unproven libraries,
+avoids unsafe C bindings, follows well-documented specifications, practices
+well-understood cryptography, and avoids placing undue trust in peers,
+even authenticated ones.
 
 This library gives you a layered, stackable wrapper (client / server) for
 network I/O, which allows you to upgrade regular network sockets to the
@@ -16,11 +17,22 @@ curvetls protocol.  All the wrapper needs is a key pair, a random nonce,
 and a socket whose underlying transport is of any reliable kind (e.g.
 a TCP- or file-backed `net.Conn`).
 
-The library is documented.  The easiest way to look at the documentation
-is by cloning this repository, then running `godoc` against it.
-Alternatively, the documentation for the latest version of the `master`
-branch of this repository can be browsed at
-https://godoc.org/github.com/Rudd-O/curvetls just fine.
+curvetls is documented with developers' interests in mind.
+[Take a look at the documentation online](https://godoc.org/github.com/Rudd-O/curvetls).
+Alternatively, clone this repository, then run `godoc` against it.
+
+## Features
+
+* Simple and robust
+  [elliptic curve encryption](https://godoc.org/golang.org/x/crypto/nacl/box)
+  of communications between peers.
+* Well-defined, robust framing scheme for reliable delivery of whole messages,
+  based on the
+  [ZeroMQ ZMTP specification](https://rfc.zeromq.org/spec:37/ZMTP/).
+* Robust public key authentication scheme to let servers decide which clients
+  are authorized to proceed, based on the
+  [CurveZMQ spec](https://rfc.zeromq.org/spec:37/ZMTP/).
+* Straightforward use of the library in your network clients and servers.
 
 ## Test client programs
 
@@ -161,9 +173,9 @@ from competing entities.
 curvetls users also enjoy the client / server handshake and send / receive
 framing that is the great work of the ZeroMQ folks (to my knowledge,
 primarily Pieter Hintjens).  In practical terms, this means you, as a user
-of curvetls, do not have to worry about authentication state machines
-or incomplete messages.  A peer is either authenticated or not.  A message
-is either fully-received or not.
+of curvetls, do not have to worry about authentication / authorization
+state machines or incomplete messages.  A peer is either authorized or not.
+A message is either fully-received or not.
 
 ### Why not CurveZMQ instead?
 

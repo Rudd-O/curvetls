@@ -89,9 +89,9 @@ func pE(conn net.Conn, frameName string, e error) error {
 // this return value, you must call either Allow() or Deny() on the returned
 // value in order to let the client know whether it is allowed to continue.
 //
-// The public key of the client; use this key to check that the
-// client is authorized to continue the conversation, then either
-// call Allow() to signal to the client that it is authorized, or
+// The public key of the client; use this key to authenticate the client
+// and decide whether it is authorized to continue the conversation, then
+// either call Allow() to signal to the client that it is authorized, or
 // call Deny() to signal to the client that it is not authorized
 // and terminate the connection.
 //
