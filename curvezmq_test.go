@@ -33,7 +33,6 @@ func benchmarkMessageDecrypt(msgsize int, b *testing.B) {
 	}
 }
 
-
 func BenchmarkMessageEncrypt1B(b *testing.B)   { benchmarkMessageEncrypt(1, b) }
 func BenchmarkMessageEncrypt64B(b *testing.B)  { benchmarkMessageEncrypt(64, b) }
 func BenchmarkMessageEncrypt1KB(b *testing.B)  { benchmarkMessageEncrypt(1024, b) }
@@ -47,4 +46,3 @@ func BenchmarkMessageDecrypt1KB(b *testing.B)  { benchmarkMessageDecrypt(1024, b
 func BenchmarkMessageDecrypt64KB(b *testing.B) { benchmarkMessageDecrypt(1024*64, b) }
 func BenchmarkMessageDecrypt1MB(b *testing.B)  { benchmarkMessageDecrypt(1024*1024, b) }
 func BenchmarkMessageDecrypt64MB(b *testing.B) { benchmarkMessageDecrypt(64*1024*1024, b) }
-
