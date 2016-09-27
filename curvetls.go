@@ -17,7 +17,8 @@
 // clients, and the public keys of the clients to the server.
 //
 // Generate one long nonce per server keypair, and one long nonce per
-// client keypair.  You can do this at runtime.
+// client keypair.  You can do this at runtime.  Never reuse the
+// same long nonce for two different keypairs.
 //
 // Make your server Listen() on a TCP socket, and Accept() incoming
 // connections to obtain one or more server net.Conn.
@@ -25,16 +26,18 @@
 // Make your clients Connect() on a TCP socket to the Listen() address
 // of the server.
 //
-// Right after Connect() on your client, wrap the net.Conn you received
+// On your client, right after Connect(), wrap the net.Conn you received
 // by using WrapClient() on that client net.Conn, and giving it the client
 // keypair, its corresponding client long nonce, and the server public key.
+// WrapClient() will return an encrypted socket you can use to talk to
+// the server.
 //
-// Right after Accept() on your server, wrap the net.Conn you received
+// On your server, right after Accept(), wrap the net.Conn you received
 // by using WrapServer() on that server net.Conn, and giving it
 // the server keypair together with its corresponding server long nonce.
-//
-// Use the public key that WrapServer() collects to decide whether to
-// Allow() the returned EncryptedConn or Deny() it.
+// Use the authorizer and the public key that WrapServer() returns to
+// decide whether to call Allow() or Deny() on the authorizer.  Allow()
+// will return an encrypted socket you can use to talk to the client.
 //
 // Congratulations, at this point you have a connection between peers that
 // is encrypted with (a limited version of) the CurveZMQ protocol.

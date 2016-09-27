@@ -46,21 +46,23 @@ func main() {
 	if err != nil {
 		log.Fatalf("Server: failed to generate nonce: %s", err)
 	}
-	ssocket, clientpubkey, err := curvetls.WrapServer(socket, serverPrivkey, serverPubkey, long_nonce)
+	authorizer, clientpubkey, err := curvetls.WrapServer(socket, serverPrivkey, serverPubkey, long_nonce)
 	if err != nil {
 		log.Fatalf("Server: failed to wrap socket: %s", err)
 	}
 	log.Printf("Server: client's public key is %s", clientpubkey)
 
+	var ssocket *curvetls.EncryptedConn
+
 	var allowed bool
 	if clientPubkey == noPubkey {
-		err = ssocket.Allow()
+		ssocket, err = authorizer.Allow()
 		allowed = true
 	} else if clientPubkey == clientpubkey {
-		err = ssocket.Allow()
+		ssocket, err = authorizer.Allow()
 		allowed = true
 	} else {
-		err = ssocket.Deny()
+		err = authorizer.Deny()
 		allowed = false
 	}
 

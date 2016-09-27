@@ -31,8 +31,11 @@ func NewLongNonce() (*longNonce, error) {
 
 // EncryptedConn is the opaque structure representing an encrypted connection.
 //
-// Use WrapClient() or WrapServer() to obtain one, and use its methods to
-// engage in secure communication.
+// On the client, use WrapClient() to obtain one.  On the server, use
+// WrapServer() to obtain an Authorizer and then invoke Allow() on
+// the authorizer to obtain an EncryptedConn.
+//
+// Then, use the EncryptedConn methods to engage in secure communication.
 //
 // EncryptedConn implemenets the net.Conn interface.
 //
@@ -83,10 +86,10 @@ func pE(conn net.Conn, frameName string, e error) error {
 //
 // Returned Values
 //
-// A net.Conn compatible object that you can use to send and receive data.
-// Data sent and received will be framed and encrypted.  Once you have received
-// this return value, you must call either Allow() or Deny() on the returned
-// value in order to let the client know whether it is allowed to continue.
+// An Authorizer object with two methods Allow() and Deny(), one of which you
+// must call.  Allow() will return an EncryptedConn (a net.Conn compatible
+// object) that you can use to send and receive data.  See the documentation
+// of Authorizer for more information.
 //
 // The public key of the client; use this key to authenticate the client
 // and decide whether it is authorized to continue the conversation, then
@@ -97,16 +100,11 @@ func pE(conn net.Conn, frameName string, e error) error {
 // An error.  It can be an underlying socket error, an internal error produced
 // by a bug in the library, or a protocol error indicating that the
 // communication encountered corrupt or malformed data from the peer.
-// No method is provided to distinguish among these errors because
-// the only sane thing to do at that point is to close the connection.
 //
 // Lifecycle Information
 //
 // If WrapServer() returns an error, the passed socket will have been closed
 // by the time this function returns.
-//
-// Upon successful return of this function, the Close() method of the returned
-// net.Conn will also Close() the passed net.Conn.
 //
 // If you read or write any data to the underlying socket rather
 // than go through the returned socket, your data will be transmitted
@@ -115,7 +113,7 @@ func pE(conn net.Conn, frameName string, e error) error {
 func WrapServer(conn net.Conn,
 	serverprivkey Privkey,
 	serverpubkey Pubkey,
-	long_nonce *longNonce) (*EncryptedConn, Pubkey, error) {
+	long_nonce *longNonce) (*Authorizer, Pubkey, error) {
 
 	// According to my reading of the ZeroMQ 4.x source, it appears to be
 	// the case that if any part of the handshake fails, their stream
@@ -174,21 +172,89 @@ func WrapServer(conn net.Conn,
 		return nil, Pubkey{}, pE(conn, "INITIATE", err)
 	}
 
-	return &EncryptedConn{
+	return &Authorizer{&EncryptedConn{
 		Conn:       conn,
 		myNonce:    myNonce,
 		theirNonce: clientNonce,
 		sharedKey:  precomputeKey(Privkey(ephServerPrivkey), Pubkey(ephClientPubkey)),
 		isServer:   true,
-	}, Pubkey(permClientPubkey), nil
+	}}, Pubkey(permClientPubkey), nil
+}
+
+// Authorizer is an opaque object returned by WrapServer that lets
+// you accept or deny a successful handshake from a client.
+//
+// To obtain an EncryptedConn you can use to communicate with
+// a client securely, call the Allow() method.  See the documentation
+// of Allow() for more information.
+type Authorizer struct {
+	encryptedConn *EncryptedConn
+}
+
+// Allow signals the client that it is authorized, finishing the handshake
+// and returning an EncryptedConn to talk to the client.
+//
+// Returned Values
+//
+// An EncryptedConn (a net.Conn compatible object) that you can use to send
+// and receive data.  Data sent and received will be framed and encrypted.
+//
+// Upon successful return of this function, the Close() method of the returned
+// net.Conn will also Close() the underlying net.Conn.
+//
+// Lifecycle Information
+//
+// If Allow() returns an error, the passed socket will
+// have been closed by the time this function returns.
+func (c *Authorizer) Allow() (*EncryptedConn, error) {
+	/* Build and send ready. */
+	var readyCmd readyCommand
+	if err := readyCmd.build(c.encryptedConn.myNonce, &c.encryptedConn.sharedKey); err != nil {
+		return nil, iE(c.encryptedConn.Conn, "READY", err)
+	}
+
+	if err := writeFrame(c.encryptedConn.Conn, &readyCmd); err != nil {
+		return nil, closeAndBail(c.encryptedConn.Conn, err)
+	}
+
+	return c.encryptedConn, nil
+}
+
+// Deny, signals the client that it is not authorized to continue,
+// and closes the underlying socket passed to WrapServer.
+//
+// Lifecycle Information
+//
+// When Deny() returns, the underlying socket will have been closed too.
+//
+// Clients which receive a Deny() denial SHALL NOT reconnect with
+// the same credentials, but wise implementors know that hostile
+// clients can do what they want, so they will need to implement
+// throttling based on public key.  WrapServer() returns the
+// verified public key of the client before the server has made
+// an authentication policy decision, so the server can implement
+// throttling based on client public key.
+func (c *Authorizer) Deny() error {
+	/* Build and send error. */
+	var errorCmd errorCommand
+	if err := errorCmd.build("unauthorized"); err != nil {
+		return iE(c.encryptedConn.Conn, "ERROR", err)
+	}
+
+	if err := writeFrame(c.encryptedConn.Conn, &errorCmd); err != nil {
+		return closeAndBail(c.encryptedConn.Conn, err)
+	}
+
+	err := c.encryptedConn.Close()
+	return err
 }
 
 // WrapClient wraps an existing, connected net.Conn with encryption and framing.
 //
 // Returned Values
 //
-// A net.Conn compatible object that you can use to send and receive data.
-// Data sent and received will be framed and encrypted.
+// An EncryptedConn (a net.Conn compatible object) that you can use to send
+// and receive data.  Data sent and received will be framed and encrypted.
 //
 // An error.  It can be an underlying socket error, an internal error produced
 // by a bug in the library, a protocol error indicating that the
@@ -206,7 +272,7 @@ func WrapServer(conn net.Conn,
 // Upon successful return of this function, the Close() method of the returned
 // net.Conn will also Close() the passed net.Conn.
 //
-// Upon unauthorized use (the server rejects the client with Deny())
+// Upon unauthorized use (the server Authorizer rejects the client with Deny())
 // this function will return an error which can be checked with
 // the function IsAuthenticationError().  See note on Deny()
 // to learn more about reconnection policy.
@@ -316,64 +382,6 @@ func WrapClient(conn net.Conn,
 		sharedKey:  sharedKey,
 		isServer:   false,
 	}, nil
-}
-
-// Allow, when called on a server socket, signals the client that
-// it is authorized to continue.
-//
-// It is an error to call Allow on a client socket.
-//
-// Lifecycle Information
-//
-// If Allow() returns an error, the passed socket will
-// have been closed by the time this function returns.
-func (c *EncryptedConn) Allow() error {
-	/* Build and send ready. */
-	var readyCmd readyCommand
-	if err := readyCmd.build(c.myNonce, &c.sharedKey); err != nil {
-		return iE(c.Conn, "READY", err)
-	}
-
-	if err := writeFrame(c.Conn, &readyCmd); err != nil {
-		return closeAndBail(c.Conn, err)
-	}
-
-	return nil
-}
-
-// Deny, when called on a server socket, signals the client that
-// it is not authorized to continue, and closes the socket.
-//
-// It is an error to call Deny on a server socket.
-//
-// Lifecycle Information
-//
-// If Deny() returns an error, the passed socket will
-// have been closed by the time this function returns.
-//
-// When Deny() returns normally, the underlying socket will have
-// been closed too.
-//
-// Clients which receive a Deny() denial SHALL NOT reconnect with
-// the same credentials, but wise implementors know that hostile
-// clients can do what they want, so they will need to implement
-// throttling based on public key.  WrapServer() returns the
-// verified public key of the client before the server has made
-// an authentication policy decision, so the server can implement
-// throttling based on client public key.
-func (c *EncryptedConn) Deny() error {
-	/* Build and send error. */
-	var errorCmd errorCommand
-	if err := errorCmd.build("unauthorized"); err != nil {
-		return iE(c.Conn, "ERROR", err)
-	}
-
-	if err := writeFrame(c.Conn, &errorCmd); err != nil {
-		return closeAndBail(c.Conn, err)
-	}
-
-	err := c.Close()
-	return err
 }
 
 // Read reads one frame from the other side, decrypts the encrypted frame,
