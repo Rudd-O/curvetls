@@ -31,3 +31,6 @@ run-pingpong: all
 
 test:
 	GOPATH=$(PWD) go test
+
+bench:
+	GOPATH=$(PWD) go test -bench=.
