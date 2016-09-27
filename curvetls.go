@@ -4,7 +4,7 @@
 // allows you to upgrade your regular network sockets to a protocol that
 // supports robust framing, transport security and authentication,
 // so long as your net.Conn is of any reliable kind (e.g. a TCP- or
-// file-backed `net.Conn`).
+// file-backed net.Conn).
 //
 // Usage Instructions
 //

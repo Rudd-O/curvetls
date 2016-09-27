@@ -181,12 +181,27 @@ func WrapServer(conn net.Conn,
 	}}, Pubkey(permClientPubkey), nil
 }
 
-// Authorizer is an opaque object returned by WrapServer that lets
-// you accept or deny a successful handshake from a client.
+// Authorizer is returned by WrapServer() together with the connecting
+// client's public key.  It lets your server make an authorization decision
+// with respect to the client.
 //
-// To obtain an EncryptedConn you can use to communicate with
-// a client securely, call the Allow() method.  See the documentation
-// of Allow() for more information.
+// By the time the caller of WrapServer() has received the authorizer
+// and the client's public key, the client has been authenticated
+// (to mean: the server knows the client truthfully holds its keypair).
+// At that point your server can invoke an authorization service of your choice
+// to decide whether the client is authorized to proceed.
+//
+// To signal to the client that it is authorized to proceed, call
+// Allow() on the authorizer.  This returns an EncryptedConn that
+// lets your server communicate with the client securely.
+//
+// Conversely, to signal to the client that it is not authorized,
+// call Deny() on the authorizer.
+//
+// You must call one of the two methods.  Failure to do so will leave
+// the client hanging, and will leak file descriptors on the server.
+//
+// See the documentation of Allow() and Deny() for important information.
 type Authorizer struct {
 	encryptedConn *EncryptedConn
 }
