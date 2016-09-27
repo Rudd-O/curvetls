@@ -6,7 +6,11 @@ import (
 	"testing"
 )
 
-func keys(t *testing.T) (sPriv Privkey, sPub Pubkey,
+type Fataler interface {
+	Fatal(...interface{})
+}
+
+func keys(t Fataler) (sPriv Privkey, sPub Pubkey,
 	cPriv Privkey, cPub Pubkey) {
 	var err error
 	sPriv, sPub, err = GenKeyPair()
@@ -20,7 +24,7 @@ func keys(t *testing.T) (sPriv Privkey, sPub Pubkey,
 	return
 }
 
-func nonces(t *testing.T) (sN, cN *shortNonce) {
+func nonces() (sN, cN *shortNonce) {
 	sN, cN = newShortNonce(), newShortNonce()
 	return
 }
@@ -34,9 +38,9 @@ type parms struct {
 	cN    *shortNonce
 }
 
-func validParms(t *testing.T) *parms {
+func validParms(t Fataler) *parms {
 	sPriv, sPub, cPriv, cPub := keys(t)
-	sN, cN := nonces(t)
+	sN, cN := nonces()
 	return &parms{sPriv, sPub, cPriv, cPub, sN, cN}
 }
 
