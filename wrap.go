@@ -379,11 +379,13 @@ func (c *EncryptedConn) Deny() error {
 // If the destination buffer is not large enough to contain the whole
 // received frame, then a partial read is made and written to the buffer,
 // and subsequent Read() calls will continue reading the remainder
-// of the frame.
+// of that frame.
 //
-// If this function returns an error, the socket remains open, but
-// (much like TLS) it is highly unlikely that, after returning an error,
-// the connection will continue working.
+// When the peer has closed the socket, Read() will return a standard EOF.
+//
+// If Read() returns an error other than a syscall error such as EOF,
+// the socket remains open, but (much like TLS) it is highly unlikely that,
+// after your program receivin that error, the connection will continue working.
 //
 // It is an error to invoke an EncryptedConn's Read() from a goroutine
 // while another goroutine is invoking Read() or ReadFrame() on the same
@@ -410,9 +412,11 @@ func (w *EncryptedConn) Read(b []byte) (int, error) {
 // ReadFrame reads one frame from the other side, decrypts the encrypted frame,
 // then returns the whole frame as a slice of bytes.
 //
-// If this function returns an error, the socket remains open, but
-// (much like TLS) it is highly unlikely that, after returning an error,
-// the connection will continue working.
+// When the peer has closed the socket, ReadFrame() will return a standard EOF.
+//
+// If ReadFrame() returns an error other than a syscall error such as EOF,
+// the socket remains open, but (much like TLS) it is highly unlikely that,
+// after your program receivin that error, the connection will continue working.
 //
 // It is an error to call ReadFrame when a previous Read was only partially
 // written to its output buffer.
