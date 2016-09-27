@@ -41,8 +41,8 @@ which can show you how to use the library:
 
 * `curvetls-genkeypair` generates keypairs for the use of the other
   command-line programs
-* `curvetls-server` implements a test ping-pong server
-* `curvetls-client` implements a test ping-pong client
+* `curvetls-pingpong-server` implements a test ping-pong server
+* `curvetls-pingpong-client` implements a test ping-pong client
 
 To run these programs, you can simply compile the library after
 cloning it to the local directory:
@@ -65,14 +65,14 @@ Generate some key pairs:
 
 Run the server (in the background):
 
-        [user@host curvetls]$ bin/curvetls-server 127.0.0.1:9001 \
+        [user@host curvetls]$ bin/curvetls-pingpong-server 127.0.0.1:9001 \
             pT6GGmPNgSPsGKD8UTPdVN50xOGeZr+eb53gfAYoeVm4= \
             Puwo38S2npQijFuh5cuShYpTnQ+ZupkwveS/A1HjjkSY= \
             Pr59DbWYjUHlj0Z8kAY9LUyP/8hUi5kC+ByX6xvPKIwc= &
 
 Run the client:
 
-        [user@host curvetls]$ bin/curvetls-client 127.0.0.1:9001 \
+        [user@host curvetls]$ bin/curvetls-pingpong-client 127.0.0.1:9001 \
             paICEhaq2fBJkCRoIMbncQ2sv+LolEvjgM43DYcrQpqM= \
             Pr59DbWYjUHlj0Z8kAY9LUyP/8hUi5kC+ByX6xvPKIwc= \
             Puwo38S2npQijFuh5cuShYpTnQ+ZupkwveS/A1HjjkSY=
