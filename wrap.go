@@ -10,6 +10,7 @@ import (
 // I read online somewhere that, if Read(buf) is called, and the returned n
 // is smaller than len(buf), the implementation of Read() must guarantee
 // that err is non-nil.
+// The message was titled "Re: io.MultiWriter has an extra check to bytes written"
 
 // NewLongNonce generates a long nonce for use with curvetls.WrapServer
 // and curvetls.WrapClient.
