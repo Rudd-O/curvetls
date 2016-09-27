@@ -729,9 +729,7 @@ func (c *readyCommand) realloc(l uint64) (bool, error) {
 
 // Builds a READY command, incrementing the passed nonce.
 // This executes on the client.
-func (c *readyCommand) build(serverShortNonce shortNoncer,
-	ephServerPrivkey ephemeralServerPrivkey,
-	ephClientPubkey ephemeralClientPubkey) error {
+func (c *readyCommand) build(serverShortNonce shortNoncer, sk *precomputedKey) error {
 
 	// FIXME: to support metadata, bump the size of this buffer.
 	_, err := c.realloc(30)
@@ -748,9 +746,7 @@ func (c *readyCommand) build(serverShortNonce shortNoncer,
 		return err
 	}
 
-	Cprime := [32]byte(ephClientPubkey)
-	Sprime := [32]byte(ephServerPrivkey)
-	encReadyBox := box.Seal(nil, []byte{}, &prefixedNonce, &Cprime, &Sprime)
+	encReadyBox := box.SealAfterPrecomputation(nil, []byte{}, &prefixedNonce, (*[32]byte)(sk))
 
 	copy(destHeader, []byte{5, 'R', 'E', 'A', 'D', 'Y'})
 	copy(destUnprefixedNonce, unprefixedNonce[:])
@@ -761,9 +757,7 @@ func (c *readyCommand) build(serverShortNonce shortNoncer,
 
 // Validates a read READY command, incrementing the passed nonce.
 // This executes in the client.
-func (c *readyCommand) validate(expectedServerShortNonce *shortNonce,
-	ephClientPrivkey ephemeralClientPrivkey,
-	ephServerPubkey ephemeralServerPubkey) error {
+func (c *readyCommand) validate(expectedServerShortNonce *shortNonce, sk *precomputedKey) error {
 
 	// FIXME: to support metadata, bump the size of this buffer.
 	if c.curlen != 30 {
@@ -793,9 +787,7 @@ func (c *readyCommand) validate(expectedServerShortNonce *shortNonce,
 	}
 
 	/* Decrypt the ready box. */
-	Sprime := [32]byte(ephServerPubkey)
-	Cprime := [32]byte(ephClientPrivkey)
-	_, ok := box.Open(nil, srcEncReadyBox, &prefixedNonce, &Sprime, &Cprime)
+	_, ok := box.OpenAfterPrecomputation(nil, srcEncReadyBox, &prefixedNonce, (*[32]byte)(sk))
 	if !ok {
 		return fmt.Errorf("cannot validate server ready box")
 	}
@@ -899,7 +891,7 @@ func (c *messageCommand) realloc(sz uint64) (bool, error) {
 
 // Builds a MESSAGE command.
 // This executes on both the server and the client.
-func (c *messageCommand) build(sn shortNoncer, priv Privkey, pub Pubkey, data []byte, sentByServer bool) error {
+func (c *messageCommand) build(sn shortNoncer, sk *precomputedKey, data []byte, sentByServer bool) error {
 
 	total := uint64(8 + 8 + 16 + 1)
 	total += uint64(len(data))
@@ -924,11 +916,8 @@ func (c *messageCommand) build(sn shortNoncer, priv Privkey, pub Pubkey, data []
 		return err
 	}
 
-	Cprime := [32]byte(pub)
-	Sprime := [32]byte(priv)
-
-	data = append([]byte{0}, data...)
-	encMessageBox := box.Seal(nil, data, &prefixedNonce, &Cprime, &Sprime)
+	payload := append([]byte{0}, data...)
+	encMessageBox := box.SealAfterPrecomputation(nil, payload, &prefixedNonce, (*[32]byte)(sk))
 
 	copy(destHeader, []byte{7, 'M', 'E', 'S', 'S', 'A', 'G', 'E'})
 	copy(destUnprefixedNonce, unprefixedNonce[:])
@@ -939,7 +928,7 @@ func (c *messageCommand) build(sn shortNoncer, priv Privkey, pub Pubkey, data []
 
 // Validates a read MESSAGE command, incrementing the passed nonce.
 // This executes on both the server and the client.
-func (c *messageCommand) validate(expectedNonce *shortNonce, priv Privkey, pub Pubkey, sentByServer bool) ([]byte, error) {
+func (c *messageCommand) validate(expectedNonce *shortNonce, sk *precomputedKey, sentByServer bool) ([]byte, error) {
 
 	if len(c.buf) < 33 {
 		return nil, fmt.Errorf("short or malformed MESSAGE")
@@ -974,21 +963,19 @@ func (c *messageCommand) validate(expectedNonce *shortNonce, priv Privkey, pub P
 		return nil, err
 	}
 
-	/* Decrypt the ready box. */
-	Sprime := [32]byte(pub)
-	Cprime := [32]byte(priv)
-	data, ok := box.Open(nil, srcEncMessageBox, &prefixedNonce, &Sprime, &Cprime)
+	payload, ok := box.OpenAfterPrecomputation(nil, srcEncMessageBox, &prefixedNonce, (*[32]byte)(sk))
 	if !ok {
 		return nil, fmt.Errorf("malformed MESSAGE payload")
 	}
-	if len(data) == 0 {
+	if len(payload) == 0 {
 		return nil, fmt.Errorf("malformed MESSAGE payload")
 	}
-	if data[0] != 0 {
-		return nil, fmt.Errorf("unsupported payload flags %d", data[0])
+	if payload[0] != 0 {
+		return nil, fmt.Errorf("unsupported payload flags %d", payload[0])
 	}
+	data := payload[1:]
 
-	return data[1:], nil
+	return data, nil
 }
 
 type genericCommand struct {

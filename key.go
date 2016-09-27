@@ -125,6 +125,8 @@ type ephemeralClientPrivkey Privkey
 
 type ephemeralClientPubkey Pubkey
 
+type precomputedKey key
+
 func genEphemeralClientKeyPair() (ephemeralClientPrivkey, ephemeralClientPubkey, error) {
 	privk, pubk, err := GenKeyPair()
 	return ephemeralClientPrivkey(privk), ephemeralClientPubkey(pubk), err
@@ -133,4 +135,13 @@ func genEphemeralClientKeyPair() (ephemeralClientPrivkey, ephemeralClientPubkey,
 func genEphemeralServerKeyPair() (ephemeralServerPrivkey, ephemeralServerPubkey, error) {
 	privk, pubk, err := GenKeyPair()
 	return ephemeralServerPrivkey(privk), ephemeralServerPubkey(pubk), err
+}
+
+func precomputeKey(priv Privkey, pub Pubkey) precomputedKey {
+	cpriv := [32]byte(priv)
+	cpub := [32]byte(pub)
+	var sk precomputedKey
+	csk := [32]byte(sk)
+	box.Precompute(&csk, &cpub, &cpriv)
+	return sk
 }

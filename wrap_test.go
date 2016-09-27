@@ -11,7 +11,8 @@ type Fataler interface {
 }
 
 func keys(t Fataler) (sPriv Privkey, sPub Pubkey,
-	cPriv Privkey, cPub Pubkey) {
+	cPriv Privkey, cPub Pubkey,
+	sK precomputedKey, cK precomputedKey) {
 	var err error
 	sPriv, sPub, err = GenKeyPair()
 	if err != nil {
@@ -21,6 +22,8 @@ func keys(t Fataler) (sPriv Privkey, sPub Pubkey,
 	if err != nil {
 		t.Fatal(err)
 	}
+	sK = precomputeKey(sPriv, sPub)
+	cK = precomputeKey(cPriv, cPub)
 	return
 }
 
@@ -34,26 +37,28 @@ type parms struct {
 	sPub  Pubkey
 	cPriv Privkey
 	cPub  Pubkey
+	sK    precomputedKey
+	cK    precomputedKey
 	sN    *shortNonce
 	cN    *shortNonce
 }
 
 func validParms(t Fataler) *parms {
-	sPriv, sPub, cPriv, cPub := keys(t)
+	sPriv, sPub, cPriv, cPub, sK, cK := keys(t)
 	sN, cN := nonces()
-	return &parms{sPriv, sPub, cPriv, cPub, sN, cN}
+	return &parms{sPriv, sPub, cPriv, cPub, sK, cK, sN, cN}
 }
 
 func validMessageFrame(t *testing.T, p *parms, payload []byte) (f *messageCommand) {
 	var err error
 
 	f = &messageCommand{}
-	err = f.build(p.sN, p.sPriv, p.cPub, payload, true)
+	err = f.build(p.sN, &p.sK, payload, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	out, err := f.validate(p.cN, p.cPriv, p.sPub, true)
+	out, err := f.validate(p.cN, &p.cK, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +101,7 @@ func TestMessageNonceOverflow(t *testing.T) {
 	// Testing that message build fails when nonce overflows
 	// Decrement the counter, which is at 1, to make it MAXUINT64-1
 	p.sN.counter -= 2
-	err := f.build(p.sN, p.sPriv, p.cPub, []byte("sup"), true)
+	err := f.build(p.sN, &p.sK, []byte("sup"), true)
 	if err != errNonceOverflow {
 		t.Errorf("%s != %s", err, errNonceOverflow)
 	}
@@ -104,7 +109,7 @@ func TestMessageNonceOverflow(t *testing.T) {
 	// Testing that message validate fails when nonce overflows
 	// Fix the server counter so that the outgoing nonce is 0.
 	sN := newFixedNonce(0)
-	err = f.build(sN, p.sPriv, p.cPub, []byte("sup"), true)
+	err = f.build(sN, &p.sK, []byte("sup"), true)
 	if err != nil {
 		t.Errorf("err != nil: %s", err)
 	}
@@ -113,7 +118,7 @@ func TestMessageNonceOverflow(t *testing.T) {
 	// routine that does the work should detect that and raise an error.
 	p.cN.counter = 0
 	p.cN.counter -= 1
-	_, err = f.validate(p.cN, p.cPriv, p.sPub, true)
+	_, err = f.validate(p.cN, &p.cK, true)
 	if err != errNonceOverflow {
 		t.Errorf("%s != %s", err, errNonceOverflow)
 	}

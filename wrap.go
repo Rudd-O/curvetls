@@ -55,11 +55,10 @@ func NewLongNonce() (*longNonce, error) {
 // another EncryptedConn is ongoing in another goroutine.  There is no
 // global mutable state shared among EncryptedConn instances.
 type EncryptedConn struct {
-	net.Conn
+	net.Conn       // FIXME reorg struct to make it more efficient, and that which is accessed frequenly should be clustered together, and measure perf diff
 	myNonce        *shortNonce
 	theirNonce     *shortNonce
-	myPrivkey      Privkey
-	theirPubkey    Pubkey
+	sharedKey      precomputedKey
 	isServer       bool
 	recvFrame      []byte
 	recvMessageCmd *messageCommand
@@ -176,12 +175,11 @@ func WrapServer(conn net.Conn,
 	}
 
 	return &EncryptedConn{
-		Conn:        conn,
-		myNonce:     myNonce,
-		theirNonce:  clientNonce,
-		myPrivkey:   Privkey(ephServerPrivkey),
-		theirPubkey: Pubkey(ephClientPubkey),
-		isServer:    true,
+		Conn:       conn,
+		myNonce:    myNonce,
+		theirNonce: clientNonce,
+		sharedKey:  precomputeKey(Privkey(ephServerPrivkey), Pubkey(ephClientPubkey)),
+		isServer:   true,
 	}, Pubkey(permClientPubkey), nil
 }
 
@@ -294,9 +292,11 @@ func WrapClient(conn net.Conn,
 		return nil, pE(conn, "READY or ERROR", err)
 	}
 
+	sharedKey := precomputeKey(Privkey(ephClientPrivkey), Pubkey(ephServerPubkey))
+
 	switch cmd := specificCmd.(type) {
 	case *readyCommand:
-		if err := cmd.validate(serverNonce, ephClientPrivkey, ephServerPubkey); err != nil {
+		if err := cmd.validate(serverNonce, &sharedKey); err != nil {
 			return nil, pE(conn, "READY", err)
 		}
 	case *errorCommand:
@@ -310,12 +310,11 @@ func WrapClient(conn net.Conn,
 	}
 
 	return &EncryptedConn{
-		Conn:        conn,
-		myNonce:     myNonce,
-		theirNonce:  serverNonce,
-		myPrivkey:   Privkey(ephClientPrivkey),
-		theirPubkey: Pubkey(ephServerPubkey),
-		isServer:    false,
+		Conn:       conn,
+		myNonce:    myNonce,
+		theirNonce: serverNonce,
+		sharedKey:  sharedKey,
+		isServer:   false,
 	}, nil
 }
 
@@ -331,9 +330,7 @@ func WrapClient(conn net.Conn,
 func (c *EncryptedConn) Allow() error {
 	/* Build and send ready. */
 	var readyCmd readyCommand
-	if err := readyCmd.build(c.myNonce,
-		ephemeralServerPrivkey(c.myPrivkey),
-		ephemeralClientPubkey(c.theirPubkey)); err != nil {
+	if err := readyCmd.build(c.myNonce, &c.sharedKey); err != nil {
 		return iE(c.Conn, "READY", err)
 	}
 
@@ -459,7 +456,7 @@ func (w *EncryptedConn) ReadFrame() ([]byte, error) {
 		return nil, err
 	}
 
-	data, err := w.recvMessageCmd.validate(w.theirNonce, w.myPrivkey, w.theirPubkey, !w.isServer)
+	data, err := w.recvMessageCmd.validate(w.theirNonce, &w.sharedKey, !w.isServer)
 	if err != nil {
 		return nil, pE(w.Conn, "MESSAGE", err)
 	}
@@ -495,7 +492,7 @@ func (w *EncryptedConn) Write(b []byte) (int, error) {
 	if w.sendMessageCmd == nil {
 		w.sendMessageCmd = &messageCommand{}
 	}
-	err := w.sendMessageCmd.build(w.myNonce, w.myPrivkey, w.theirPubkey, b, w.isServer)
+	err := w.sendMessageCmd.build(w.myNonce, &w.sharedKey, b, w.isServer)
 	if err != nil {
 		return 0, iE(w.Conn, "MESSAGE", err)
 	}
