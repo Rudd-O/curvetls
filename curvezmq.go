@@ -910,7 +910,7 @@ func (c *messageCommand) build(sn *shortNonce, priv Privkey, pub Pubkey, data []
 	destEncMessageBox := c.buf[16:total]
 
 	var prefix [16]byte
-	if serverSending {
+	if sentByServer {
 		prefix = serverMessageNoncePrefix
 	} else {
 		prefix = clientMessageNoncePrefix
@@ -960,7 +960,7 @@ func (c *messageCommand) validate(expectedNonce *shortNonce, priv Privkey, pub P
 	}
 
 	var prefix [16]byte
-	if !serverSending {
+	if sentByServer {
 		prefix = serverMessageNoncePrefix
 	} else {
 		prefix = clientMessageNoncePrefix

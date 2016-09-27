@@ -456,7 +456,7 @@ func (w *EncryptedConn) ReadFrame() ([]byte, error) {
 		return nil, err
 	}
 
-	data, err := w.recvMessageCmd.validate(w.theirNonce, w.myPrivkey, w.theirPubkey, w.isServer)
+	data, err := w.recvMessageCmd.validate(w.theirNonce, w.myPrivkey, w.theirPubkey, !w.isServer)
 	if err != nil {
 		if err == errNonceOverflow {
 			return nil, newProtocolError("%s", err)
