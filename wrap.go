@@ -118,6 +118,12 @@ func WrapServer(conn net.Conn,
 	serverpubkey Pubkey,
 	long_nonce *longNonce) (*EncryptedConn, Pubkey, error) {
 
+	// According to my reading of the ZeroMQ 4.x source, it appears to be
+	// the case that if any part of the handshake fails, their stream
+	// handler error() method is called, which simply disconnects
+	// the underlying socket altogether.  This we found out after
+	// our code had already implemented that behavior.
+	// See https://github.com/zeromq/zeromq4-1/blob/d8732929d507d59dd8d877d35a81308d4ddb1e71/src/stream_engine.cpp#L925
 	myNonce := newShortNonce()
 	clientNonce := newShortNonce()
 
