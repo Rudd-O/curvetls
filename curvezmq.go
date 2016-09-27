@@ -80,6 +80,10 @@ type shortNonce struct {
 	counter uint64
 }
 
+type shortNoncer interface {
+	prefixAndBump(prefix [16]byte) ([24]byte, [8]byte, error)
+}
+
 func newShortNonce() *shortNonce {
 	return &shortNonce{}
 }
@@ -390,7 +394,7 @@ func (h *helloCommand) realloc(uint64) (bool, error) {
 // Returns:
 //     error: an error
 func (h *helloCommand) build(
-	clientShortNonce *shortNonce,
+	clientShortNonce shortNoncer,
 	ephClientPrivkey ephemeralClientPrivkey,
 	ephClientPubkey ephemeralClientPubkey,
 	permServerPubkey permanentServerPubkey) error {
@@ -579,7 +583,7 @@ func (c *initiateCommand) realloc(l uint64) (bool, error) {
 
 // Builds an INITIATE command, incrementing the passed nonce.
 // This executes on the client.
-func (c *initiateCommand) build(clientShortNonce *shortNonce,
+func (c *initiateCommand) build(clientShortNonce shortNoncer,
 	clientLongNonce *longNonce,
 	cookie serverCookie,
 	permClientPrivkey permanentClientPrivkey,
@@ -725,7 +729,7 @@ func (c *readyCommand) realloc(l uint64) (bool, error) {
 
 // Builds a READY command, incrementing the passed nonce.
 // This executes on the client.
-func (c *readyCommand) build(serverShortNonce *shortNonce,
+func (c *readyCommand) build(serverShortNonce shortNoncer,
 	ephServerPrivkey ephemeralServerPrivkey,
 	ephClientPubkey ephemeralClientPubkey) error {
 
@@ -895,7 +899,7 @@ func (c *messageCommand) realloc(sz uint64) (bool, error) {
 
 // Builds a MESSAGE command.
 // This executes on both the server and the client.
-func (c *messageCommand) build(sn *shortNonce, priv Privkey, pub Pubkey, data []byte, serverSending bool) error {
+func (c *messageCommand) build(sn shortNoncer, priv Privkey, pub Pubkey, data []byte, sentByServer bool) error {
 
 	total := uint64(8 + 8 + 16 + 1)
 	total += uint64(len(data))
@@ -935,7 +939,7 @@ func (c *messageCommand) build(sn *shortNonce, priv Privkey, pub Pubkey, data []
 
 // Validates a read MESSAGE command, incrementing the passed nonce.
 // This executes on both the server and the client.
-func (c *messageCommand) validate(expectedNonce *shortNonce, priv Privkey, pub Pubkey, serverSending bool) ([]byte, error) {
+func (c *messageCommand) validate(expectedNonce *shortNonce, priv Privkey, pub Pubkey, sentByServer bool) ([]byte, error) {
 
 	if len(c.buf) < 33 {
 		return nil, fmt.Errorf("short or malformed MESSAGE")
