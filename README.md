@@ -1,5 +1,4 @@
-curvetls: a simple, robust transport encryption package
-=======================================================
+# curvetls: a simple, robust transport encryption package
 
 curvetls is a Go library that gives you a robust framing and encryption
 layer for your Go programs, striving to be secure, strict, and simple.
@@ -23,8 +22,7 @@ Alternatively, the documentation for the latest version of the `master`
 branch of this repository can be browsed at
 https://godoc.org/github.com/Rudd-O/curvetls just fine.
 
-Test client programs
---------------------
+## Test client programs
 
 In addition to the library, this project ships three demon programs,
 which can show you how to use the library:
@@ -76,8 +74,7 @@ goes from program to program.
 
 Run the programs with no arguments to get usage information.
 
-Quality, testing and benchmarking
----------------------------------
+## Quality, testing and benchmarking
 
 To run the tests:
 
@@ -90,30 +87,192 @@ To run a variety of benchmarks (such as message encryption and decryption):
 curvetls releases should not come with failing tests.  If a test fails,
 that is a problem and you should report it as an issue right away.
 
-Goals and motivations
----------------------
+## Goals and motivations
 
-One of the goals of curvetls is to be interoperable with CurveZMQ DEALER
-sockets in reliable mode (e.g. TCP), but without the odd socket semantics of
-ZeroMQ, which give you little control over the low-level connection and
-acceptance process, and make it hard to track peer identities.
+As security software, curvetls has the following goals:
+
+* To enable users of this library to depend on as little code as possible,
+  with special emphasis on reducing unsafe code.
+* To give implementors a simple way to enable encryption between two peers,
+  with as little effort as possible.
+* To make sure that implementors do not have to deal with any low-level
+  details that they may screw up, compromising the security of their programs.
+* To ensure that users of this library do not have to deal with hidden
+  surprises, such as servers allowing clients to allocate unbound resources.
+
+curvetls focuses on getting the low-level security details right, so that
+you do not have to.
+
+### Why curvetls instead of `net.tls`?
+
+Some people have asked why this library needs to exist, given that Go has
+`net/tls`, which is a high-performance crypto library.
+
+The answer is that `net/tls` is much, much more than just a crypto library,
+and that has implications for security and complexity.  There's a niche in
+communications where TLS is overkill but plain TCP is irresponsible, and
+that is a niche which many packages have attempted to fill, from CurveCP
+to tcpcrypt.  curvetls fills this niche quite nicely.
+
+The list-form, practical answer to why you may want to avoid `net/tls`:
+
+* A PKI system with certificates imposes on the implementor the additional
+  burden of having to manage the certificate authority that emits the
+  certificates, possibly a revocation infrastructure, both for clients and
+  servers.
+* PKI as implemented in the modern world, including in `net/tls`, is a
+  bit of a mess in that you have to write extra code if you want to do
+  something that's outside the norm, but still perfectly sensible for certain
+  use cases.  Like, say, have clients reject certificates not signed by
+  VeriSign, or have full cert validation without domain name validation.
+  This demands configuration code that you *must* get right in your program.
+* X.509 certificates are very complex compared to simple base64
+  strings (what this library uses).  There have been vulnerabilities,
+  sometimes years-old, in certificate parsing code.
+* TLS itself is highly complex, because of backwards compatibility reasons
+  and the need to support many ciphers.  This complexity has given rise to
+  many security issues as well as many opportunities for the implementor
+  to shoot himself on the foot.  This is 100% unneeded complexity if all you
+  want is to send / receive well-encrypted data between two private peers.
+
+TLS is fine and dandy, very well supported in Go via the `net/tls` package,
+and many use cases effectively require you to use TLS.  However, TLS brings
+in a *lot* more complexity than just handshake plus NaCL encryption, and
+that increases the attack surface.  Sometimes all you need is a simple
+drop-in implementation of peer-to-peer public key crypto.  That's what
+curvetls aims to do well.  I think four lines of (non-error handling) code
+— one for creating a keypair, one for creating a nonce, one for driving
+the handshake, and one for authorizing the client — is as simple as it can
+get, and the code that runs underneath is far less complex than anything
+you get with invoking any of `net.tls` for the same use case.
+
+### Why are you rolling your own crypto code / protocol?
+
+Let's be 100% blunt: curvetls does *not* roll its own crypto.  The crypto
+in curvetls is the same crypto as the NaCL library, which is fast,
+well-tested and presumed to be strong.
+
+curvetls also does *not* roll its own protocol.  One of the goals of curvetls
+is to be interoperable with CurveZMQ DEALER sockets in reliable mode
+(e.g. TCP).  As such, we implement the pertinent specification, which are
+very good specifications — 100% unambiguous — and enjoy many implementations
+from competing entities.
+
+curvetls users also enjoy the client / server handshake and send / receive
+framing that is the great work of the ZeroMQ folks (to my knowledge,
+primarily Pieter Hintjens).  In practical terms, this means you, as a user
+of curvetls, do not have to worry about authentication state machines
+or incomplete messages.  A peer is either authenticated or not.  A message
+is either fully-received or not.
+
+### Why not CurveZMQ instead?
+
+ZeroMQ is great software, but it has three problems, one Go-specific and
+two more in general w.r.t. security:
+
+**Problem numero uno**: you can't really send on a ZeroMQ socket in a
+goroutine while receiving on that same socket in another goroutine.
+[Your program will crash if you do](https://github.com/pebbe/zmq3/issues/21#issuecomment-68414300).
+This is fundamental if you want to have a program that sends and
+receives at the same time, without having to "take turns", HTTP style.
+There's ways you can get around that —
+[PAIR inproc socket pairs](http://stackoverflow.com/questions/36437799/how-to-deal-with-zmq-sockets-lack-of-thread-safety)
+for in-process communication, pairs of DEALER sockets on each peer,
+[poll loops and reactors](https://stackoverflow.com/a/36438543) — but all
+of these ways impose extra complexity and a very unnatural and non-idiomatic
+programming regime for Go programs.
+
+curvetls sockets, in contrast, are safe to `Read()` from one goroutine
+while another goroutine `Write()`s to them.  They work in the expected manner
+and do not require you to implement any bespoke multiplexing solutions.
+
+**Problem numero dos**: if you use the existing ZeroMQ implementations,
+then you are bringing into your process a lot of unsafe code, plus a lot
+of code you don't need just to do peer-to-peer encryption and authentication.
+
+curvetls effectively implements the most basic use case of ZeroMQ plus
+CurveZMQ, without the extra dependency of ZeroMQ, or any unsafe C code.
+This package depends on no unsafe libraries, beyond perhaps the Go NaCL
+implementation or the Go standard library itself.
+
+**Problem numero tres**: did you know that ZeroMQ happily lets clients
+send 1 GB buffers, and allocates that memory on the server to receive
+them?
+
+We have a high-priority item on our roadmap which involves giving
+implementors a knob that lets them limit the amount of memory a single frame
+can consume.  Because in ZeroMQ a frame can be effectively as large as you
+can imagine, and the frame will not be delivered to the peer until the
+peer has read all of it into memory, malicious clients which have
+successfully completed the handshake — perhaps they stole a keypair,
+perhaps the server `Allow`()s all peers — can bring a server down by making
+it allocate inordinately large amounts of memory.
+
+Additionally, curvetls — unlike CurveZMQ — will not accept any metadata
+from a peer during the handshake (which happens *before* the peer has been
+authenticated).  CurveZMQ metadata is effectively specified to be as big as
+you can imagine, which lets clients (and servers!) fill memory on your
+server before the CurveZMQ handshake completes.  On the roadmap we have
+an item which involves adding support for metadata during handshake, but
+not before we can provide you, the implementor, with a knob that limits
+the amount of metadata a peer is allowed to send.
+
+**Problem numero cuatro**: ZeroMQ happily accepts as many connections as peers,
+including hostile peers, will send its way.  You are not in control of the
+`Accept()` call — your code only gets notified of *messages*, not of
+peer connections and disconnections.  These are some odd socket semantics
+which work well in many use cases that involve trustworthy peers, but
+these semantics work badly outside of it.  Additionally, you have to write
+extra code in order to track identities — ZeroMQ will not, by default,
+let you track of peers by key identity, mostly assuming that a message is a
+message is a message, irrespective of which peer is sending it.  Effectively,
+you have reduced control over the low-level connection and authentication
+process, when you implement a ZeroMQ server.  You *can* solve the
+authentication and authorization issue, but the low-level connection
+acceptance and throttling part is strictly off-limits to you as a programmer.
 
 In curvetls, you are in charge of connecting / listening / accepting /
-tracking / closing sockets, rather than letting ZeroMQ handle that behind the
-scenes.  This lets you implement custom access control mechanisms and early
-connection throttling, which is desirable when writing robust servers.
+tracking / closing sockets.  This lets you implement custom throttling
+policies based on which peer is connecting *prior* to the handshake itself,
+and it lets you know verifiably which peer has connected as soon as the
+handshake is over.  You *want* these properties when writing robust servers.
+Have a traffic storm or more clients than your program wants to handle?
+Throttle the socket `Accept()`.  Have a peer that is already active and
+authenticated but wants to connect for a second time?  Close the socket
+on it as soon as the handshake is over.  Have a peer that is relentlessly
+connecting when you don't want it to?  Close the socket on it as soon as
+the `Accept()` returns, or run a firewall rule change — you have the peer's
+IP address right after `Accept()`, after all.
 
-Of course, another goal of curvetls is to make sure that the full power of the
-CurveCP security mechanism is available to you without needing to rely on
-the extra dependency of ZeroMQ, or any unsafe C code.
+These were the security concerns I needed to address when I set out to write
+curvetls, and I'm happy to report they have either been addressed or been
+considered high-priority and active work.
 
-As such, this package uses no unsafe libraries or dependencies like ZeroMQ,
-however, the client / server handshake and send / receive mechanisms reuse the
-great work that is the ZeroMQ framing scheme.  In practical terms, this means
-you do not have to worry about receiving incomplete messages.
+### Why not CurveCP?
 
-Technical and compatibility information
--------------------------------------
+The first reason is that there are no complete implementations of CurveCP
+for Go.  You can take the existing implementation and write a binding for it,
+but that was much more work than implementing a well-documented specification
+in a memory-safe language.
+
+The second reason is that, even if you do a binding to CurveCP, the full power
+of the CurveCP security mechanism would then be available to implementors
+but with the burden of having to rely on unsafe code that is basically
+abandoned.
+
+The third reason: CurveCP brings with it the extra code of implementing a
+reliable protocol over UDP.  This aspect of CurveCP is truly a noble project
+that can revolutionize the Internet — if it hasn't already, as CurveCP was
+the forefather of Google's QUIC — but it's still extra code that is less
+tested than TCP, and it puts more complexity in the path between peer and
+your program's processing code.
+
+### Why not (this thing I haven't heard of)?
+
+I'm happy to read the code of that thing and talk to you about it.  Who knows,
+maybe that thing will render curvetls entirely unnecessary?
+
+## Technical and compatibility information
 
 Compatibility:
 
@@ -134,8 +293,7 @@ wrapping library which will wrap (let's say, UDP) network I/O sockets using
 the CurveCP congestion algorithm as specified in its documentation.  Such a
 wrapper, if it returns net.Conn instances, will be compatible with this work.
 
-Legal information
------------------
+## Legal information
 
 The license of this library is GPLv3 or later.  See file `COPYING`
 for details.  For relicensing inquiries, contact the author.
