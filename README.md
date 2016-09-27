@@ -76,6 +76,20 @@ goes from program to program.
 
 Run the programs with no arguments to get usage information.
 
+Quality, testing and benchmarking
+---------------------------------
+
+To run the tests:
+
+        make test
+
+To run a variety of benchmarks (such as message encryption and decryption):
+
+        make bench
+
+curvetls releases should not come with failing tests.  If a test fails,
+that is a problem and you should report it as an issue right away.
+
 Goals and motivations
 ---------------------
 
