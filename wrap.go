@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net"
-	"time"
 )
 
 // NewLongNonce generates a long nonce for use with curvetls.WrapServer
@@ -25,9 +24,11 @@ func NewLongNonce() (*longNonce, error) {
 }
 
 // EncryptedConn is the opaque structure representing an encrypted connection.
-///
+//
 // Use WrapClient() or WrapServer() to obtain one, and use its methods to
 // engage in secure communication.
+//
+// EncryptedConn implemenets the net.Conn interface.
 //
 // Lifecycle Information
 //
@@ -48,7 +49,7 @@ func NewLongNonce() (*longNonce, error) {
 // another EncryptedConn is ongoing in another goroutine.  There is no
 // global mutable state shared among EncryptedConn instances.
 type EncryptedConn struct {
-	conn           net.Conn
+	net.Conn
 	myNonce        *shortNonce
 	theirNonce     *shortNonce
 	myPrivkey      Privkey
@@ -57,23 +58,6 @@ type EncryptedConn struct {
 	recvFrame      []byte
 	recvMessageCmd *messageCommand
 	sendMessageCmd *messageCommand
-}
-
-// Close closes the connection, including the underlying socket.
-//
-// It is an error to use Close() twice or to use other methods after Close().
-func (w *EncryptedConn) Close() error {
-	return w.conn.Close()
-}
-
-// LocalAddr() retrieves the local peer net.Addr of the underlying socket.
-func (w *EncryptedConn) LocalAddr() net.Addr {
-	return w.conn.LocalAddr()
-}
-
-// RemoteAddr() retrieves the remote peer net.Addr of the underlying socket.
-func (w *EncryptedConn) RemoteAddr() net.Addr {
-	return w.conn.RemoteAddr()
 }
 
 // Read reads one frame from the other side, decrypts the encrypted frame,
@@ -148,7 +132,7 @@ func (w *EncryptedConn) ReadFrame() ([]byte, error) {
 	if w.recvMessageCmd == nil {
 		w.recvMessageCmd = &messageCommand{}
 	}
-	if err := readFrame(w.conn, w.recvMessageCmd); err != nil {
+	if err := readFrame(w.Conn, w.recvMessageCmd); err != nil {
 		return nil, err
 	}
 
@@ -199,25 +183,16 @@ func (w *EncryptedConn) Write(b []byte) (int, error) {
 		return 0, newInternalError("cannot build MESSAGE: %s", err)
 	}
 
-	if err := writeFrame(w.conn, w.sendMessageCmd); err != nil {
+	if err := writeFrame(w.Conn, w.sendMessageCmd); err != nil {
 		return 0, err
 	}
 	return len(b), nil
 }
 
-// SetDeadline calls SetDeadline on the underlying socket.
-func (w *EncryptedConn) SetDeadline(t time.Time) error {
-	return w.conn.SetDeadline(t)
-}
-
-// SetReadDeadline calls SetReadDeadline on the underlying socket.
-func (w *EncryptedConn) SetReadDeadline(t time.Time) error {
-	return w.conn.SetReadDeadline(t)
-}
-
-// SetWriteDeadline calls SetWriteDeadline on the underlying socket.
-func (w *EncryptedConn) SetWriteDeadline(t time.Time) error {
-	return w.conn.SetWriteDeadline(t)
+func closeAndBail(conn net.Conn, e error) error {
+	// These are unrecoverable errors.  We close the socket.
+	conn.Close()
+	return e
 }
 
 // WrapServer wraps an existing, connected net.Conn with encryption and framing.
@@ -258,12 +233,6 @@ func WrapServer(conn net.Conn,
 	serverpubkey Pubkey,
 	long_nonce *longNonce) (*EncryptedConn, Pubkey, error) {
 
-	bail := func(e error) (*EncryptedConn, Pubkey, error) {
-		// These are unrecoverable errors.  We close the socket.
-		conn.Close()
-		return nil, Pubkey{}, e
-	}
-
 	myNonce := newShortNonce()
 	clientNonce := newShortNonce()
 
@@ -273,22 +242,22 @@ func WrapServer(conn net.Conn,
 	expectedgreeting.asClient()
 
 	if err := wrc(conn, mygreeting[:], theirgreeting[:]); err != nil {
-		return bail(err)
+		return nil, Pubkey{}, closeAndBail(conn, err)
 	}
 
 	if theirgreeting != expectedgreeting {
-		return bail(newProtocolError("malformed greeting"))
+		return nil, Pubkey{}, closeAndBail(conn, newProtocolError("malformed greeting"))
 	}
 
 	/* Read and validate hello. */
 	var helloCmd helloCommand
 	if err := readFrame(conn, &helloCmd); err != nil {
-		return bail(err)
+		return nil, Pubkey{}, closeAndBail(conn, err)
 	}
 
 	ephClientPubkey, err := helloCmd.validate(clientNonce, permanentServerPrivkey(serverprivkey))
 	if err != nil {
-		return bail(newProtocolError("invalid HELLO: %s", err))
+		return nil, Pubkey{}, closeAndBail(conn, newProtocolError("invalid HELLO: %s", err))
 	}
 
 	/* Build and send welcome. */
@@ -298,28 +267,28 @@ func WrapServer(conn net.Conn,
 	// FIXME: wipe memory of cookie, and all the ephemeral server keys at this point
 	if err != nil {
 		if err == errNonceOverflow {
-			return bail(newProtocolError("%s", err))
+			return nil, Pubkey{}, closeAndBail(conn, newProtocolError("%s", err))
 		}
-		return bail(newInternalError("cannot build WELCOME: %s", err))
+		return nil, Pubkey{}, closeAndBail(conn, newInternalError("cannot build WELCOME: %s", err))
 	}
 
 	if err := writeFrame(conn, &welcomeCmd); err != nil {
-		return bail(err)
+		return nil, Pubkey{}, closeAndBail(conn, err)
 	}
 
 	/* Read and validate initiate. */
 	var initiateCmd initiateCommand
 	if err := readFrame(conn, &initiateCmd); err != nil {
-		return bail(err)
+		return nil, Pubkey{}, closeAndBail(conn, err)
 	}
 
 	permClientPubkey, ephClientPubkey, ephServerPrivkey, err := initiateCmd.validate(clientNonce, permanentServerPubkey(serverpubkey), cookieKey)
 	if err != nil {
-		return bail(newProtocolError("invalid INITIATE: %s", err))
+		return nil, Pubkey{}, closeAndBail(conn, newProtocolError("invalid INITIATE: %s", err))
 	}
 
 	return &EncryptedConn{
-		conn:        conn,
+		Conn:        conn,
 		myNonce:     myNonce,
 		theirNonce:  clientNonce,
 		myPrivkey:   Privkey(ephServerPrivkey),
@@ -365,19 +334,13 @@ func WrapClient(conn net.Conn,
 	permServerPubkey Pubkey,
 	long_nonce *longNonce) (*EncryptedConn, error) {
 
-	bail := func(e error) (*EncryptedConn, error) {
-		// These are unrecoverable errors.  We close the socket.
-		conn.Close()
-		return nil, e
-	}
-
 	myNonce := newShortNonce()
 	serverNonce := newShortNonce()
 
 	/* Generate ephemeral keypair for this connection. */
 	ephClientPrivkey, ephClientPubkey, err := genEphemeralClientKeyPair()
 	if err != nil {
-		return bail(newInternalError("cannot generate ephemeral keypair", err))
+		return nil, closeAndBail(conn, newInternalError("cannot generate ephemeral keypair", err))
 	}
 
 	/* Do greeting. */
@@ -386,35 +349,35 @@ func WrapClient(conn net.Conn,
 	expectedgreeting.asServer()
 
 	if err := wrc(conn, mygreeting[:], theirgreeting[:]); err != nil {
-		return bail(err)
+		return nil, closeAndBail(conn, err)
 	}
 
 	if theirgreeting != expectedgreeting {
-		return bail(newProtocolError("malformed greeting"))
+		return nil, closeAndBail(conn, newProtocolError("malformed greeting"))
 	}
 
 	/* Build and send hello. */
 	var helloCmd helloCommand
 	if err := helloCmd.build(myNonce, ephClientPrivkey, ephClientPubkey, permanentServerPubkey(permServerPubkey)); err != nil {
 		if err == errNonceOverflow {
-			return bail(newProtocolError("%s", err))
+			return nil, closeAndBail(conn, newProtocolError("%s", err))
 		}
-		return bail(newInternalError("cannot build HELLO: %s", err))
+		return nil, closeAndBail(conn, newInternalError("cannot build HELLO: %s", err))
 	}
 
 	if err := writeFrame(conn, &helloCmd); err != nil {
-		return bail(err)
+		return nil, closeAndBail(conn, err)
 	}
 
 	/* Receive and validate welcome. */
 	var welcomeCmd welcomeCommand
 	if err := readFrame(conn, &welcomeCmd); err != nil {
-		return bail(err)
+		return nil, closeAndBail(conn, err)
 	}
 
 	ephServerPubkey, sCookie, err := welcomeCmd.validate(ephClientPrivkey, permanentServerPubkey(permServerPubkey))
 	if err != nil {
-		return bail(newProtocolError("invalid WELCOME: %s", err))
+		return nil, closeAndBail(conn, newProtocolError("invalid WELCOME: %s", err))
 	}
 
 	/* Build and send initiate. */
@@ -429,43 +392,43 @@ func WrapClient(conn net.Conn,
 		ephClientPrivkey,
 		ephClientPubkey); err != nil {
 		if err == errNonceOverflow {
-			return bail(newProtocolError("%s", err))
+			return nil, closeAndBail(conn, newProtocolError("%s", err))
 		}
-		return bail(newInternalError("cannot build INITIATE: %s", err))
+		return nil, closeAndBail(conn, newInternalError("cannot build INITIATE: %s", err))
 	}
 
 	if err := writeFrame(conn, &initiateCmd); err != nil {
-		return bail(err)
+		return nil, closeAndBail(conn, err)
 	}
 
 	/* Receive and validate ready. */
 	var genericCmd genericCommand
 	if err := readFrame(conn, &genericCmd); err != nil {
-		return bail(err)
+		return nil, closeAndBail(conn, err)
 	}
 
 	specificCmd, err := genericCmd.convert()
 	if err != nil {
-		return bail(newProtocolError("invalid READY or ERROR: %s", err))
+		return nil, closeAndBail(conn, newProtocolError("invalid READY or ERROR: %s", err))
 	}
 
 	switch cmd := specificCmd.(type) {
 	case *readyCommand:
 		if err := cmd.validate(serverNonce, ephClientPrivkey, ephServerPubkey); err != nil {
-			return bail(newProtocolError("invalid READY: %s", err))
+			return nil, closeAndBail(conn, newProtocolError("invalid READY: %s", err))
 		}
 	case *errorCommand:
 		reason, err := cmd.validate()
 		if err != nil {
-			return bail(newProtocolError("invalid ERROR: %s", err))
+			return nil, closeAndBail(conn, newProtocolError("invalid ERROR: %s", err))
 		}
-		return bail(newAuthenticationError(reason))
+		return nil, closeAndBail(conn, newAuthenticationError(reason))
 	default:
-		return bail(newProtocolError("invalid command: %s", cmd))
+		return nil, closeAndBail(conn, newProtocolError("invalid command: %s", cmd))
 	}
 
 	return &EncryptedConn{
-		conn:        conn,
+		Conn:        conn,
 		myNonce:     myNonce,
 		theirNonce:  serverNonce,
 		myPrivkey:   Privkey(ephClientPrivkey),
@@ -484,25 +447,19 @@ func WrapClient(conn net.Conn,
 // If Allow() returns an error, the passed socket will
 // have been closed by the time this function returns.
 func (c *EncryptedConn) Allow() error {
-	bail := func(e error) error {
-		// These are unrecoverable errors.  We close the socket.
-		c.conn.Close()
-		return e
-	}
-
 	/* Build and send ready. */
 	var readyCmd readyCommand
 	if err := readyCmd.build(c.myNonce,
 		ephemeralServerPrivkey(c.myPrivkey),
 		ephemeralClientPubkey(c.theirPubkey)); err != nil {
 		if err == errNonceOverflow {
-			return bail(newProtocolError("%s", err))
+			return closeAndBail(c, newProtocolError("%s", err))
 		}
-		return bail(newInternalError("cannot build READY: %s", err))
+		return closeAndBail(c, newInternalError("cannot build READY: %s", err))
 	}
 
-	if err := writeFrame(c.conn, &readyCmd); err != nil {
-		return bail(err)
+	if err := writeFrame(c.Conn, &readyCmd); err != nil {
+		return closeAndBail(c, err)
 	}
 
 	return nil
@@ -529,26 +486,20 @@ func (c *EncryptedConn) Allow() error {
 // an authentication policy decision, so the server can implement
 // throttling based on client public key.
 func (c *EncryptedConn) Deny() error {
-	bail := func(e error) error {
-		// These are unrecoverable errors.  We close the socket.
-		c.conn.Close()
-		return e
-	}
-
 	/* Build and send error. */
 	var errorCmd errorCommand
 	if err := errorCmd.build("unauthorized"); err != nil {
 		if err == errNonceOverflow {
-			return bail(newProtocolError("%s", err))
+			return closeAndBail(c.Conn, newProtocolError("%s", err))
 		}
-		return bail(newInternalError("cannot build ERROR: %s", err))
+		return closeAndBail(c, newInternalError("cannot build ERROR: %s", err))
 	}
 
-	if err := writeFrame(c.conn, &errorCmd); err != nil {
-		return bail(err)
+	if err := writeFrame(c.Conn, &errorCmd); err != nil {
+		return closeAndBail(c, err)
 	}
 
-	err := c.conn.Close()
+	err := c.Close()
 	return err
 }
 
