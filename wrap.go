@@ -403,9 +403,11 @@ func WrapClient(conn net.Conn,
 //
 // When the peer has closed the socket, Read() will return a standard EOF.
 //
-// If Read() returns an error other than a syscall error such as EOF,
-// the socket remains open, but (much like TLS) it is highly unlikely that,
-// after your program receivin that error, the connection will continue working.
+// Lifecycle Information
+//
+// If Read() returns an error, the socket remains technically open, but
+// (much like TLS) it is highly unlikely that, after your program receives
+// the error, the connection will continue working.
 //
 // It is an error to invoke an EncryptedConn's Read() from a goroutine
 // while another goroutine is invoking Read() or ReadFrame() on the same
@@ -434,9 +436,11 @@ func (w *EncryptedConn) Read(b []byte) (int, error) {
 //
 // When the peer has closed the socket, ReadFrame() will return a standard EOF.
 //
-// If ReadFrame() returns an error other than a syscall error such as EOF,
-// the socket remains open, but (much like TLS) it is highly unlikely that,
-// after your program receivin that error, the connection will continue working.
+// Lifecycle Information
+//
+// If ReadFrame() returns an error, the socket remains technically open, but
+// (much like TLS) it is highly unlikely that, after your program receives
+// the error, the connection will continue working.
 //
 // It is an error to call ReadFrame when a previous Read was only partially
 // written to its output buffer.
