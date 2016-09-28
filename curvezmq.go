@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+        "io"
 	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/crypto/nacl/secretbox"
 	"net"
@@ -46,22 +47,9 @@ var clientMessageNoncePrefix = [16]byte{'C', 'u', 'r', 'v', 'e', 'Z', 'M', 'Q', 
 const maxUint = ^uint(0)
 const maxFrameSize = int(maxUint >> 1)
 
-// The following function reads from the read buffer until
-// either it exhausts or the conn returns an error such as EOF.
-// Callers assume that an error means it's game over, and have
-// no need to process the length of the read data.
 func rc(conn net.Conn, buf []byte) error {
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			return err
-		}
-		if n < len(buf) {
-			buf = buf[n:]
-			continue
-		}
-		return nil
-	}
+	_, err := io.ReadFull(conn, buf)
+	return err
 }
 
 func wc(conn net.Conn, data []byte) error {
